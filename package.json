@@ -15,7 +15,8 @@
     "lint:contracts": "solhint 'contracts/*.sol'",
     "lint:contracts:fix": "solhint 'contracts/**/*.sol' --fix",
     "format:check": "prettier --check .",
-    "format:fix": "prettier --write ."
+    "format:fix": "prettier --write .",
+    "full:cycle": "node scripts/full_cycle.js"
   },
   "dependencies": {
     "@chainlink/contracts": "^1.4.0",

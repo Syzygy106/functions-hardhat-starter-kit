@@ -15,12 +15,31 @@ const { ethers } = await import("npm:ethers@6.9.0")
 // Use ethers JsonRpcProvider to perform calls (counts as HTTP under the hood)
 const provider = new ethers.JsonRpcProvider("http://localhost:8545")
 
-// 1) Fetch all addresses from registry via eth_call (getAll())
-const regIface = new ethers.Interface(["function getAll() view returns (address[])"])
-const dataGetAll = regIface.encodeFunctionData("getAll")
-const allHex = await provider.call({ to: REGISTRY, data: dataGetAll })
-if (!allHex || typeof allHex !== "string" || !allHex.startsWith("0x")) throw Error("Bad getAll result")
-const addresses = regIface.decodeFunctionResult("getAll", allHex)[0]
+// 1) Fetch addresses: try packedAll() first, then fallback to getAll()
+const regIface = new ethers.Interface([
+  "function packedAll() view returns (bytes)",
+  "function getAll() view returns (address[])",
+])
+
+let addresses
+try {
+  const dataPacked = regIface.encodeFunctionData("packedAll")
+  const packedHex = await provider.call({ to: REGISTRY, data: dataPacked })
+  if (!packedHex || typeof packedHex !== "string" || !packedHex.startsWith("0x")) throw Error("bad packed")
+  const bytes = ethers.getBytes(packedHex)
+  if (bytes.length % 20 !== 0) throw Error("packed len not multiple of 20")
+  const addrs = []
+  for (let i = 0; i < bytes.length; i += 20) {
+    const slice = bytes.slice(i, i + 20)
+    addrs.push(ethers.getAddress("0x" + Buffer.from(slice).toString("hex")))
+  }
+  addresses = addrs
+} catch (e) {
+  const dataGetAll = regIface.encodeFunctionData("getAll")
+  const allHex = await provider.call({ to: REGISTRY, data: dataGetAll })
+  if (!allHex || typeof allHex !== "string" || !allHex.startsWith("0x")) throw Error("Bad getAll result")
+  addresses = regIface.decodeFunctionResult("getAll", allHex)[0]
+}
 if (!Array.isArray(addresses) || addresses.length < 3) throw Error("need >=3 items")
 
 // 2) Multicall getPoints() across all addresses
