@@ -49,29 +49,53 @@ try {
 }
 if (!Array.isArray(addresses) || addresses.length < 3) throw Error("need >=3 items")
 
-// 2) Multicall getPoints() across all addresses
+// 2) Multicall: first check active(address), then getPoints() on active only
 const mcIface = new ethers.Interface([
   "function aggregateGasLimited((address target, bytes callData)[] calls, uint64 perCallGas, bool allowFailure) view returns (uint256 blockNumber, (bool success, bytes returnData)[] results)",
 ])
 const pointsIface = new ethers.Interface(["function getPoints() view returns (uint256)"])
-// For ethers v6 with named tuple fields, pass objects { target, callData }
-const calls = addresses.map((a) => ({ target: a, callData: pointsIface.encodeFunctionData("getPoints", []) }))
-const dataMc = mcIface.encodeFunctionData("aggregateGasLimited", [calls, BigInt(PER_CALL_GAS), true])
+const regActiveIface = new ethers.Interface(["function active(address) view returns (bool)"])
+let calls = addresses.map((a) => ({ target: REGISTRY, callData: regActiveIface.encodeFunctionData("active", [a]) }))
+let dataMc = mcIface.encodeFunctionData("aggregateGasLimited", [calls, BigInt(PER_CALL_GAS), true])
 
-const mcOut = await provider.call({ to: MULTICALL, data: dataMc })
-if (!mcOut || typeof mcOut !== "string" || !mcOut.startsWith("0x")) throw Error("Bad multicall result")
+let mcOut = await provider.call({ to: MULTICALL, data: dataMc })
+if (!mcOut || typeof mcOut !== "string" || !mcOut.startsWith("0x")) throw Error("Bad multicall result (active)")
 
-const decoded = mcIface.decodeFunctionResult("aggregateGasLimited", mcOut)
-const results = decoded[1]
-if (!Array.isArray(results)) throw Error("Bad results array")
+let decoded = mcIface.decodeFunctionResult("aggregateGasLimited", mcOut)
+let results = decoded[1]
+if (!Array.isArray(results)) throw Error("Bad results array (active)")
+const isActive = results.map((r) =>
+  r.success ? regActiveIface.decodeFunctionResult("active", r.returnData)[0] : false
+)
+
+const filteredAddrs = []
+const filteredIds = []
+for (let i = 0; i < addresses.length; i++) {
+  if (isActive[i]) {
+    filteredAddrs.push(addresses[i])
+    filteredIds.push(ids[i])
+  }
+}
+if (filteredAddrs.length < 3) throw Error("need >=3 active items")
+
+// getPoints on active only
+calls = filteredAddrs.map((a) => ({ target: a, callData: pointsIface.encodeFunctionData("getPoints", []) }))
+dataMc = mcIface.encodeFunctionData("aggregateGasLimited", [calls, BigInt(PER_CALL_GAS), true])
+
+mcOut = await provider.call({ to: MULTICALL, data: dataMc })
+if (!mcOut || typeof mcOut !== "string" || !mcOut.startsWith("0x")) throw Error("Bad multicall result (points)")
+
+decoded = mcIface.decodeFunctionResult("aggregateGasLimited", mcOut)
+results = decoded[1]
+if (!Array.isArray(results)) throw Error("Bad results array (points)")
 
 // 3) Collect (index/id, address, points) and sort desc by points, tie-break by lower address
 const pairs = []
-for (let i = 0; i < addresses.length; i++) {
+for (let i = 0; i < filteredAddrs.length; i++) {
   const r = results[i]
   if (r.success) {
     const p = pointsIface.decodeFunctionResult("getPoints", r.returnData)[0]
-    pairs.push([ids[i], addresses[i], BigInt(p.toString())])
+    pairs.push([filteredIds[i], filteredAddrs[i], BigInt(p.toString())])
   }
 }
 if (pairs.length < 3) throw Error("<3 success items")

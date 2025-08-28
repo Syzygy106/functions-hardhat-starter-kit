@@ -15,7 +15,7 @@ async function createAndFundSubscription(consumer) {
   const txOptions = { confirmations: 1, overrides: { gasPrice: ncfg.gasPrice } }
   const subscriptionId = await sm.createSubscription({ consumerAddress: consumer, txOptions })
 
-  const juelsAmount = ethers.utils.parseUnits("50", 18).toString()
+  const juelsAmount = ethers.utils.parseUnits("25", 18).toString()
   await sm.fundSubscription({ juelsAmount, subscriptionId, txOptions })
 
   return BigInt(subscriptionId)

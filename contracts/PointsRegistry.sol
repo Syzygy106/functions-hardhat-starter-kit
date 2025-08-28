@@ -3,11 +3,13 @@ pragma solidity ^0.8.19;
 
 contract PointsRegistry {
   event Added(address indexed target, uint8 id);
+  event ActivationChanged(address indexed target, uint8 id, bool active);
 
   address[] private _addrs;
   mapping(address => bool) public exists;
   mapping(address => uint8) public addressToId;
   mapping(uint8 => address) public idToAddress;
+  mapping(address => bool) public active;
 
   function addMany(address[] memory addrs) external {
     for (uint256 i = 0; i < addrs.length; i++) {
@@ -20,6 +22,7 @@ contract PointsRegistry {
       idToAddress[id] = t;
       _addrs.push(t);
       emit Added(t, id);
+      // active[t] is false by default
     }
   }
 
@@ -32,6 +35,7 @@ contract PointsRegistry {
     idToAddress[id] = t;
     _addrs.push(t);
     emit Added(t, id);
+    // active[t] is false by default
   }
 
   function length() external view returns (uint256) {
@@ -59,6 +63,40 @@ contract PointsRegistry {
 
   function packedHash() external view returns (bytes32) {
     return keccak256(abi.encodePacked(_addrs));
+  }
+
+  function setActive(address t, bool a) external {
+    require(exists[t], "!exist");
+    uint8 id = addressToId[t];
+    active[t] = a;
+    emit ActivationChanged(t, id, a);
+  }
+
+  function setActiveById(uint8 id, bool a) external {
+    address t = idToAddress[id];
+    require(t != address(0), "!exist");
+    active[t] = a;
+    emit ActivationChanged(t, id, a);
+  }
+
+  function activateMany(address[] calldata addrs) external {
+    for (uint256 i = 0; i < addrs.length; i++) {
+      address t = addrs[i];
+      if (exists[t] && !active[t]) {
+        active[t] = true;
+        emit ActivationChanged(t, addressToId[t], true);
+      }
+    }
+  }
+
+  function deactivateMany(address[] calldata addrs) external {
+    for (uint256 i = 0; i < addrs.length; i++) {
+      address t = addrs[i];
+      if (exists[t] && active[t]) {
+        active[t] = false;
+        emit ActivationChanged(t, addressToId[t], false);
+      }
+    }
   }
 
   /// Packed pairs: [id(1) | address(20)] * N

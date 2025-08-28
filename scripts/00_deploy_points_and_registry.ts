@@ -30,6 +30,17 @@ async function main() {
   await tx.wait()
   console.log("Registry:", reg.address)
 
+  // Randomly activate a subset; others remain inactive by default
+  const toActivate: string[] = []
+  for (const a of pointsAddrs) {
+    if (crypto.randomInt(0, 2) === 0) toActivate.push(a)
+  }
+  if (toActivate.length > 0) {
+    const tx2 = await reg.activateMany(toActivate)
+    await tx2.wait()
+    console.log("Activated count:", toActivate.length)
+  }
+
   writeArtifact("PointsRegistry", { address: reg.address })
   writeArtifact("PointsSet", { addresses: pointsAddrs })
 }
