@@ -84,7 +84,9 @@ allPairs.sort((a, b) => {
 })
 
 // 4) Take up to 128 ids and pack into uint256[8] (16 ids per word, 16 bits each)
-const takeIds = allPairs.slice(0, 128).map((x) => x[0])
+let takeIds = allPairs.slice(0, 128).map((x) => x[0])
+// Pad with sentinel 0xFFFF for empty slots to avoid ambiguous id=0
+while (takeIds.length < 128) takeIds.push(0xffff)
 const words = new Array(8).fill(0n)
 for (let i = 0; i < takeIds.length; i++) {
   const wordIndex = Math.floor(i / 16)

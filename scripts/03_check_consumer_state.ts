@@ -32,7 +32,11 @@ async function main() {
   }
 
   const ids: number[] = []
-  for (let i = 0; i < show; i++) ids.push(await (c as any).topIdsAt(i))
+  for (let i = 0; i < show; i++) {
+    const id: number = await (c as any).topIdsAt(i)
+    if (id === 0xffff) break // sentinel means no more ids
+    ids.push(id)
+  }
   console.log("First IDs:", ids.join(", "))
 
   for (let i = 0; i < show; i++) {
