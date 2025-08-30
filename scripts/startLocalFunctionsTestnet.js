@@ -17,6 +17,11 @@ require("@chainlink/env-enc").config("../.env.enc")
         verbose: false,
         quiet: true, // Set this to `false` to see logs from the local testnet
       },
+      // Ganache chain options
+      chain: {
+        // Set block gas limit to 50,000,000 as per testing plan
+        blockGasLimit: 50_000_000,
+      },
     } // Ganache server options (optional)
   )
 
@@ -30,13 +35,13 @@ require("@chainlink/env-enc").config("../.env.enc")
   const addressToFund = new Wallet(process.env["PRIVATE_KEY"]).address
   await localFunctionsTestnetInfo.getFunds(addressToFund, {
     weiAmount: utils.parseEther("100").toString(), // 100 ETH
-    juelsAmount: utils.parseEther("100").toString(), // 100 LINK
+    juelsAmount: utils.parseEther("100000").toString(), // 100,000 LINK
   })
   if (process.env["SECOND_PRIVATE_KEY"]) {
     const secondAddressToFund = new Wallet(process.env["SECOND_PRIVATE_KEY"]).address
     await localFunctionsTestnetInfo.getFunds(secondAddressToFund, {
       weiAmount: utils.parseEther("100").toString(), // 100 ETH
-      juelsAmount: utils.parseEther("100").toString(), // 100 LINK
+      juelsAmount: utils.parseEther("100000").toString(), // 100,000 LINK
     })
   }
 

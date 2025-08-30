@@ -71,7 +71,7 @@ const networks = {
     verifyApiKey: process.env.POLYGONSCAN_API_KEY || "UNSET",
     chainId: 137,
     confirmations: DEFAULT_VERIFICATION_BLOCK_CONFIRMATIONS,
-    nativeCurrencySymbol: "ETH",
+    nativeCurrencySymbol: "MATIC",
     linkToken: "0xb0897686c545045aFc77CF20eC7A532E3120E0F1",
     linkPriceFeed: "0x5787BefDc0ECd210Dfa948264631CD53E68F7802", // LINK/MATIC
     functionsRouter: "0xdc2AAF042Aeff2E68B3e8E33F19e4B9fA7C73F10",
@@ -135,8 +135,6 @@ const networks = {
     nonce: undefined,
     accounts,
     verifyApiKey: process.env.ARBISCAN_API_KEY || "UNSET",
-    url: process.env.ARBITRUM_SEPOLIA_RPC_URL || "UNSET",
-    accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : [],
     chainId: 421614,
     confirmations: DEFAULT_VERIFICATION_BLOCK_CONFIRMATIONS,
     nativeCurrencySymbol: "ETH",
@@ -306,8 +304,8 @@ const networks = {
     accounts,
     confirmations: 1,
     nativeCurrencySymbol: "ETH",
-    linkToken: "0x3F92FbDde2B6A7607D7bfFE5756f5ED6f91D2E72",
-    functionsRouter: "0x08d5aBee7A0Af347Ba9dA0534b166F6a20E5c900",
+    linkToken: "0x174675AaF364bCAD974ae1888405eBa29979476F",
+    functionsRouter: "0x4642De1F62E9EE311475a8e09683327B84eB8Ee0",
     donId: "local-functions-testnet",
   },
 }

@@ -72,3 +72,20 @@ You should see a “fulfilled!” message for the request and then three address
 
 ## Upstream starter kit
 This project builds on: `https://github.com/smartcontractkit/functions-hardhat-starter-kit`
+
+
+
+## LOCAL FULL TEST:
+
+IN TERMINAL 1:
+
+`cd /Users/vladissa/cursor_projects/Solidity_Projects/Chainlink_Playground/functions-hardhat-starter-kit
+export PRIVATE_KEY=0x59c6995e998f97a5a0044966f094538cfd0b0b7a7f7a5d3bdc0b6d1d5a0b7a5c
+npm run startLocalFunctionsTestnet`
+
+
+IN TERMINAL 2:
+
+`cd /Users/vladissa/cursor_projects/Solidity_Projects/Chainlink_Playground/functions-hardhat-starter-kit
+export PRIVATE_KEY=0x59c6995e998f97a5a0044966f094538cfd0b0b7a7f7a5d3bdc0b6d1d5a0b7a5c
+npm run full:cycle`

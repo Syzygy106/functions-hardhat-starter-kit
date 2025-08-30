@@ -9,14 +9,30 @@ async function main() {
 
   const Points = await ethers.getContractFactory("Points")
   const pointsAddrs: string[] = []
-  const total = 100
+
+  const totalEnv = process.env.TOTAL_POINTS
+  const activeEnv = process.env.ACTIVE_POINTS
+  const total = Math.max(0, Math.min(3200, totalEnv ? parseInt(totalEnv) : 100))
+  const activeTarget = Math.max(0, Math.min(total, activeEnv ? parseInt(activeEnv) : Math.floor(total / 2)))
+
+  // Optional seed for reproducibility
+  const seed = process.env.SEED ? parseInt(process.env.SEED) : Date.now()
+  const rng = crypto.createHash("sha256").update(seed.toString()).digest()
+  let rngIdx = 0
+  function randInt(maxExclusive: number): number {
+    const v = rng[rngIdx % rng.length]
+    rngIdx++
+    return v % maxExclusive
+  }
+
+  // Deploy Points contracts
   for (let i = 0; i < total; i++) {
-    // ids 0..99; fixed tops: 10→999, 6→888, 69→777; others random 1..100 per run
+    // Fixed tops for visibility
     let score: number
     if (i === 10) score = 999
     else if (i === 6) score = 888
     else if (i === 69) score = 777
-    else score = crypto.randomInt(1, 101)
+    else score = 1 + randInt(100)
     const c = await Points.deploy(score)
     await c.deployed()
     pointsAddrs.push(c.address)
@@ -26,20 +42,36 @@ async function main() {
   const Registry = await ethers.getContractFactory("PointsRegistry")
   const reg = await Registry.deploy()
   await reg.deployed()
-  const tx = await reg.addMany(pointsAddrs)
-  await tx.wait()
+
+  // Chunked addMany to avoid huge tx data
+  const CHUNK = 100
+  for (let i = 0; i < pointsAddrs.length; i += CHUNK) {
+    const chunk = pointsAddrs.slice(i, i + CHUNK)
+    const tx = await reg.addMany(chunk)
+    await tx.wait()
+  }
   console.log("Registry:", reg.address)
 
-  // Randomly activate a subset; others remain inactive by default
+  // Decide which addresses to activate
   const toActivate: string[] = []
-  for (const a of pointsAddrs) {
-    if (crypto.randomInt(0, 2) === 0) toActivate.push(a)
+  if (activeTarget > 0) {
+    // pick first N for determinism, then shuffle mildly
+    const idxs = [...Array(pointsAddrs.length).keys()]
+    // simple Fisher-Yates using rng
+    for (let i = idxs.length - 1; i > 0; i--) {
+      const j = randInt(i + 1)
+      ;[idxs[i], idxs[j]] = [idxs[j], idxs[i]]
+    }
+    for (let i = 0; i < activeTarget; i++) toActivate.push(pointsAddrs[idxs[i]])
   }
-  if (toActivate.length > 0) {
-    const tx2 = await reg.activateMany(toActivate)
-    await tx2.wait()
-    console.log("Activated count:", toActivate.length)
+
+  // Chunked activateMany
+  for (let i = 0; i < toActivate.length; i += CHUNK) {
+    const chunk = toActivate.slice(i, i + CHUNK)
+    const tx = await reg.activateMany(chunk)
+    await tx.wait()
   }
+  console.log("Activated count:", toActivate.length)
 
   writeArtifact("PointsRegistry", { address: reg.address })
   writeArtifact("PointsSet", { addresses: pointsAddrs })
@@ -51,6 +83,9 @@ function writeArtifact(name: string, data: any) {
   fs.writeFileSync(path.join(dir, `${name}.json`), JSON.stringify(data, null, 2))
 }
 
-main().catch((e) => { console.error(e); process.exit(1) })
+main().catch((e) => {
+  console.error(e)
+  process.exit(1)
+})
 
 

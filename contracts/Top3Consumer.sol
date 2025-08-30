@@ -11,10 +11,11 @@ contract Top3Consumer is FunctionsClient, ConfirmedOwner {
 
   bytes32 public donId;
   PointsRegistry public registry;
-  uint8[5] public top5Ids;
+  uint256[8] public topPacked; // packed 128 uint16 ids (16 ids per 256-bit word)
+  uint16 public topCount; // optional; may be <=128, 0 if unknown
   bytes32 public lastRequestId;
 
-  event Top5IdsUpdated(uint8[5] top5Ids);
+  event TopIdsUpdated(uint16 count);
 
   constructor(address router, bytes32 _donId, address registryAddr) FunctionsClient(router) ConfirmedOwner(msg.sender) {
     donId = _donId;
@@ -46,13 +47,20 @@ contract Top3Consumer is FunctionsClient, ConfirmedOwner {
   function fulfillRequest(bytes32 requestId, bytes memory response, bytes memory err) internal override {
     require(requestId == lastRequestId, "unknown request");
     require(err.length == 0, "functions error");
-    uint256 packed = abi.decode(response, (uint256));
-    uint8 id0 = uint8(packed & 0xff);
-    uint8 id1 = uint8((packed >> 8) & 0xff);
-    uint8 id2 = uint8((packed >> 16) & 0xff);
-    uint8 id3 = uint8((packed >> 24) & 0xff);
-    uint8 id4 = uint8((packed >> 32) & 0xff);
-    top5Ids = [id0, id1, id2, id3, id4];
-    emit Top5IdsUpdated(top5Ids);
+    uint256[8] memory words = abi.decode(response, (uint256[8]));
+    // Single SSTORE per word (8 total) to keep callback gas low
+    for (uint256 i = 0; i < 8; i++) {
+      topPacked[i] = words[i];
+    }
+    topCount = 128;
+    emit TopIdsUpdated(topCount);
+  }
+
+  function topIdsAt(uint256 index) external view returns (uint16) {
+    require(index < 128, "oob");
+    uint256 wordIndex = index / 16;
+    uint256 slot = index % 16;
+    uint256 word = topPacked[wordIndex];
+    return uint16((word >> (slot * 16)) & 0xffff);
   }
 }

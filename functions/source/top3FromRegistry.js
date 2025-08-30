@@ -1,122 +1,97 @@
 // Runs inside Chainlink Functions (Deno runtime)
 // Uses localFunctionsTestnet JSON-RPC at http://localhost:8545
-// New Args: [registryAddress, multicallAddress, perCallGas(optional default 200000)]
+// New Args: [registryAddress]
 
-if (!args || args.length < 2) {
-  throw Error("Expected args: [registryAddress, multicallAddress, perCallGas?]")
+if (!args || args.length < 1) {
+  throw Error("Expected args: [registryAddress]")
 }
 
 const REGISTRY = args[0]
-const MULTICALL = args[1]
-const PER_CALL_GAS = args[2] ? Number(args[2]) : 200000
 
 const { ethers } = await import("npm:ethers@6.9.0")
 
-// Use ethers JsonRpcProvider to perform calls (counts as HTTP under the hood)
-const provider = new ethers.JsonRpcProvider("http://localhost:8545")
+// Use JsonRpcProvider with static network to avoid extra eth_chainId probe (saves 1 HTTP)
+const provider = new ethers.JsonRpcProvider("http://localhost:8545", { chainId: 1337, name: "localFunctionsTestnet" })
 
-// 1) Fetch pairs [id|address] in one call; fallback to getAll if unavailable
+// Registry interface for new meta + ranged aggregation
 const regIface = new ethers.Interface([
-  "function packedPairs() view returns (bytes)",
-  "function getAll() view returns (address[])",
+  "function activationMeta() view returns (uint256, bytes)",
+  "function aggregatePointsRange(uint256 start, uint256 count) view returns (uint128[])",
 ])
 
-let addresses
-let ids
-try {
-  const dataPacked = regIface.encodeFunctionData("packedPairs")
-  const packedHex = await provider.call({ to: REGISTRY, data: dataPacked })
-  if (!packedHex || typeof packedHex !== "string" || !packedHex.startsWith("0x")) throw Error("bad packed")
-  const bytes = ethers.getBytes(packedHex)
-  if (bytes.length % 21 !== 0) throw Error("packed len not multiple of 21")
-  const addrs = []
-  const idbuf = []
-  for (let i = 0; i < bytes.length; i += 21) {
-    const id = bytes[i]
-    const slice = bytes.slice(i + 1, i + 21)
-    idbuf.push(id)
-    addrs.push(ethers.getAddress("0x" + Buffer.from(slice).toString("hex")))
-  }
-  addresses = addrs
-  ids = idbuf
-} catch (e) {
-  const dataGetAll = regIface.encodeFunctionData("getAll")
-  const allHex = await provider.call({ to: REGISTRY, data: dataGetAll })
-  if (!allHex || typeof allHex !== "string" || !allHex.startsWith("0x")) throw Error("Bad getAll result")
-  addresses = regIface.decodeFunctionResult("getAll", allHex)[0]
-  // derive ids as indices
-  ids = addresses.map((_, i) => i)
+// 1) Fetch total and activation bitmap (1 HTTP)
+const metaData = regIface.encodeFunctionData("activationMeta")
+const metaHex = await provider.call({ to: REGISTRY, data: metaData })
+if (!metaHex || typeof metaHex !== "string" || !metaHex.startsWith("0x")) throw Error("Bad activationMeta")
+const [totalBn, bitmap] = regIface.decodeFunctionResult("activationMeta", metaHex)
+const total = BigInt(totalBn.toString())
+if (total === 0n) {
+  // return empty packed uint256[8]
+  const zeros = Array(8).fill(0n)
+  const encEmpty = new ethers.AbiCoder().encode(["uint256[8]"], [zeros])
+  return (await import("npm:ethers@6.9.0")).ethers.getBytes(encEmpty)
 }
-if (!Array.isArray(addresses) || addresses.length < 3) throw Error("need >=3 items")
 
-// 2) Multicall: first check active(address), then getPoints() on active only
-const mcIface = new ethers.Interface([
-  "function aggregateGasLimited((address target, bytes callData)[] calls, uint64 perCallGas, bool allowFailure) view returns (uint256 blockNumber, (bool success, bytes returnData)[] results)",
-])
-const pointsIface = new ethers.Interface(["function getPoints() view returns (uint256)"])
-const regActiveIface = new ethers.Interface(["function active(address) view returns (bool)"])
-let calls = addresses.map((a) => ({ target: REGISTRY, callData: regActiveIface.encodeFunctionData("active", [a]) }))
-let dataMc = mcIface.encodeFunctionData("aggregateGasLimited", [calls, BigInt(PER_CALL_GAS), true])
+const bytesBitmap = ethers.getBytes(bitmap)
 
-let mcOut = await provider.call({ to: MULTICALL, data: dataMc })
-if (!mcOut || typeof mcOut !== "string" || !mcOut.startsWith("0x")) throw Error("Bad multicall result (active)")
-
-let decoded = mcIface.decodeFunctionResult("aggregateGasLimited", mcOut)
-let results = decoded[1]
-if (!Array.isArray(results)) throw Error("Bad results array (active)")
-const isActive = results.map((r) =>
-  r.success ? regActiveIface.decodeFunctionResult("active", r.returnData)[0] : false
-)
-
-const filteredAddrs = []
-const filteredIds = []
-for (let i = 0; i < addresses.length; i++) {
-  if (isActive[i]) {
-    filteredAddrs.push(addresses[i])
-    filteredIds.push(ids[i])
+// Fast path: if no active bits, return zeros without range calls
+let anyActive = false
+for (let i = 0; i < bytesBitmap.length; i++) {
+  if (bytesBitmap[i] !== 0) {
+    anyActive = true
+    break
   }
 }
-if (filteredAddrs.length < 3) throw Error("need >=3 active items")
+if (!anyActive) {
+  const zeros = new Array(8).fill(0n)
+  const encEmpty = new ethers.AbiCoder().encode(["uint256[8]"], [zeros])
+  return (await import("npm:ethers@6.9.0")).ethers.getBytes(encEmpty)
+}
 
-// getPoints on active only
-calls = filteredAddrs.map((a) => ({ target: a, callData: pointsIface.encodeFunctionData("getPoints", []) }))
-dataMc = mcIface.encodeFunctionData("aggregateGasLimited", [calls, BigInt(PER_CALL_GAS), true])
-
-mcOut = await provider.call({ to: MULTICALL, data: dataMc })
-if (!mcOut || typeof mcOut !== "string" || !mcOut.startsWith("0x")) throw Error("Bad multicall result (points)")
-
-decoded = mcIface.decodeFunctionResult("aggregateGasLimited", mcOut)
-results = decoded[1]
-if (!Array.isArray(results)) throw Error("Bad results array (points)")
-
-// 3) Collect (index/id, address, points) and sort desc by points, tie-break by lower address
-const pairs = []
-for (let i = 0; i < filteredAddrs.length; i++) {
-  const r = results[i]
-  if (r.success) {
-    const p = pointsIface.decodeFunctionResult("getPoints", r.returnData)[0]
-    pairs.push([filteredIds[i], filteredAddrs[i], BigInt(p.toString())])
+// 2) Up to 4 range calls of 800
+const BATCH = 800n
+const maxBatches = 4n
+const neededBatches = (total + BATCH - 1n) / BATCH
+const batches = neededBatches > maxBatches ? maxBatches : neededBatches
+const allPairs = [] // [id:number, points:bigint]
+for (let b = 0n; b < batches; b++) {
+  const start = b * BATCH
+  const left = total > start ? total - start : 0n
+  const take = left < BATCH ? left : BATCH
+  if (take === 0n) break
+  const dataAgg = regIface.encodeFunctionData("aggregatePointsRange", [start, take])
+  const aggHex = await provider.call({ to: REGISTRY, data: dataAgg })
+  if (!aggHex || typeof aggHex !== "string" || !aggHex.startsWith("0x")) throw Error("Bad aggregatePointsRange")
+  const arr = regIface.decodeFunctionResult("aggregatePointsRange", aggHex)[0]
+  for (let i = 0n; i < take; i++) {
+    const id = Number(start + i) // uint16 range
+    // apply bitmap: check bit id
+    const byteIndex = Number((start + i) / 8n)
+    const bitIndex = Number((start + i) % 8n)
+    const bitSet = (bytesBitmap[byteIndex] & (1 << bitIndex)) !== 0
+    if (bitSet) {
+      const p = BigInt(arr[Number(i)].toString())
+      if (p > 0n) allPairs.push([id, p])
+    }
   }
 }
-if (pairs.length < 3) throw Error("<3 success items")
-pairs.sort((a, b) => {
-  if (a[2] > b[2]) return -1
-  if (a[2] < b[2]) return 1
-  // tie-break by address numeric value (lower first)
-  const aa = BigInt(a[1].toLowerCase())
-  const bb = BigInt(b[1].toLowerCase())
-  if (aa < bb) return -1
-  if (aa > bb) return 1
-  return 0
+
+// 3) Sort by points desc, tie by lower id
+allPairs.sort((a, b) => {
+  if (a[1] > b[1]) return -1
+  if (a[1] < b[1]) return 1
+  return a[0] - b[0]
 })
 
-// Pack five uint8 ids into one uint256
-const top5ids = pairs.slice(0, 5).map((x) => x[0])
-const packed =
-  (BigInt(top5ids[0]) & 0xffn) |
-  ((BigInt(top5ids[1]) & 0xffn) << 8n) |
-  ((BigInt(top5ids[2]) & 0xffn) << 16n) |
-  ((BigInt(top5ids[3]) & 0xffn) << 24n) |
-  ((BigInt(top5ids[4]) & 0xffn) << 32n)
-const enc = new ethers.AbiCoder().encode(["uint256"], [packed])
+// 4) Take up to 128 ids and pack into uint256[8] (16 ids per word, 16 bits each)
+const takeIds = allPairs.slice(0, 128).map((x) => x[0])
+const words = new Array(8).fill(0n)
+for (let i = 0; i < takeIds.length; i++) {
+  const wordIndex = Math.floor(i / 16)
+  const slot = i % 16
+  const shift = BigInt(slot * 16)
+  words[wordIndex] |= (BigInt(takeIds[i]) & 0xffffn) << shift
+}
+
+const enc = new ethers.AbiCoder().encode(["uint256[8]"], [words])
 return (await import("npm:ethers@6.9.0")).ethers.getBytes(enc)

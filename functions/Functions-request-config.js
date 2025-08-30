@@ -10,14 +10,6 @@ function readJson(p) {
 const artifactsDir = path.join(__dirname, "../deploy-artifacts")
 
 const reg = readJson(path.join(artifactsDir, "PointsRegistry.json"))
-let helper
-let multicall
-try {
-  helper = readJson(path.join(artifactsDir, "PointsTop3Helper.json"))
-} catch {}
-try {
-  multicall = readJson(path.join(artifactsDir, "GasCappedMulticall.json"))
-} catch {}
 const consumer = readJson(path.join(artifactsDir, "Top3Consumer.json"))
 
 module.exports = {
@@ -32,12 +24,8 @@ module.exports = {
 
   // Secrets & args
   secretsLocation: 1, // Remote by default for toolkit; we use no secrets on local
-  // New args: registry, multicall, perCallGas
-  args: [
-    reg.address,
-    (multicall && multicall.address) || (helper && helper.address) || "0x0000000000000000000000000000000000000000",
-    "200000",
-  ],
+  // Args: registry only (registry provides compact aggregation APIs)
+  args: [reg.address],
   expectedReturnType: "bytes",
 
   // Target consumer (если скрипт functions-request попросит)
