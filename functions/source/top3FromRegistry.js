@@ -13,36 +13,18 @@ const { ethers } = await import("npm:ethers@6.9.0")
 // Use JsonRpcProvider with static network to avoid extra eth_chainId probe (saves 1 HTTP)
 const provider = new ethers.JsonRpcProvider("http://localhost:8545", { chainId: 1337, name: "localFunctionsTestnet" })
 
-// Registry interface for new meta + ranged aggregation
+// Registry interface for length stub + ranged aggregation
 const regIface = new ethers.Interface([
-  "function activationMeta() view returns (uint256, bytes)",
+  "function length() view returns (uint256)",
   "function aggregatePointsRange(uint256 start, uint256 count) view returns (uint128[])",
 ])
 
-// 1) Fetch total and activation bitmap (1 HTTP)
-const metaData = regIface.encodeFunctionData("activationMeta")
-const metaHex = await provider.call({ to: REGISTRY, data: metaData })
-if (!metaHex || typeof metaHex !== "string" || !metaHex.startsWith("0x")) throw Error("Bad activationMeta")
-const [totalBn, bitmap] = regIface.decodeFunctionResult("activationMeta", metaHex)
-const total = BigInt(totalBn.toString())
+// 1) Fetch total (stub). We don't use activation bitmap anymore.
+const lenData = regIface.encodeFunctionData("length")
+const lenHex = await provider.call({ to: REGISTRY, data: lenData })
+if (!lenHex || typeof lenHex !== "string" || !lenHex.startsWith("0x")) throw Error("Bad length")
+const total = BigInt(lenHex)
 if (total === 0n) {
-  // return empty packed uint256[8]
-  const zeros = Array(8).fill(0n)
-  const encEmpty = new ethers.AbiCoder().encode(["uint256[8]"], [zeros])
-  return (await import("npm:ethers@6.9.0")).ethers.getBytes(encEmpty)
-}
-
-const bytesBitmap = ethers.getBytes(bitmap)
-
-// Fast path: if no active bits, return zeros without range calls
-let anyActive = false
-for (let i = 0; i < bytesBitmap.length; i++) {
-  if (bytesBitmap[i] !== 0) {
-    anyActive = true
-    break
-  }
-}
-if (!anyActive) {
   // Return 128 sentinels (0xFFFF) → words are all 1s (16×16-bit segments)
   const allOnes = (1n << 256n) - 1n
   const words = new Array(8).fill(allOnes)
@@ -67,14 +49,8 @@ for (let b = 0n; b < batches; b++) {
   const arr = regIface.decodeFunctionResult("aggregatePointsRange", aggHex)[0]
   for (let i = 0n; i < take; i++) {
     const id = Number(start + i) // uint16 range
-    // apply bitmap: check bit id
-    const byteIndex = Number((start + i) / 8n)
-    const bitIndex = Number((start + i) % 8n)
-    const bitSet = (bytesBitmap[byteIndex] & (1 << bitIndex)) !== 0
-    if (bitSet) {
-      const p = BigInt(arr[Number(i)].toString())
-      if (p > 0n) allPairs.push([id, p])
-    }
+    const p = BigInt(arr[Number(i)].toString())
+    if (p > 0n) allPairs.push([id, p])
   }
 }
 
