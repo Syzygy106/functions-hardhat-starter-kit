@@ -22,7 +22,7 @@ async function main() {
 
   const total: number = (await r.length()).toNumber ? (await r.length()).toNumber() : Number(await r.length())
   const cnt: number = await c.topCount()
-  const show = Math.min(cnt, 10)
+  const show = Math.min(128, 10)
 
   console.log("Registry total:", total)
   console.log("Top count (upper bound):", cnt)

@@ -43,8 +43,10 @@ for (let i = 0; i < bytesBitmap.length; i++) {
   }
 }
 if (!anyActive) {
-  const zeros = new Array(8).fill(0n)
-  const encEmpty = new ethers.AbiCoder().encode(["uint256[8]"], [zeros])
+  // Return 128 sentinels (0xFFFF) → words are all 1s (16×16-bit segments)
+  const allOnes = (1n << 256n) - 1n
+  const words = new Array(8).fill(allOnes)
+  const encEmpty = new ethers.AbiCoder().encode(["uint256[8]"], [words])
   return (await import("npm:ethers@6.9.0")).ethers.getBytes(encEmpty)
 }
 
