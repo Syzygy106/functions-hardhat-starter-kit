@@ -235,30 +235,32 @@ contract Conflux is BaseHook, DaemonRegistry, ChainLinkConsumer, HookOwnable, Po
     return false;
   }
 
-  // ---- Public wrappers calling internal parents (cheaper & readable) ----
-  function addMany(address[] memory addrs) external {
-    _addMany(addrs);
+  // ---- Admin APIs (hook owner) and user-facing single-activation ----
+  // Add many daemons with their owners (admin only)
+  function addMany(address[] calldata daemonAddresses, address[] calldata owners) external onlyHookOwner {
+    require(daemonAddresses.length == owners.length, "len");
+    for (uint256 i = 0; i < daemonAddresses.length; i++) {
+      _add(daemonAddresses[i], owners[i]);
+    }
   }
 
-  function add(address t) external {
-    _add(t);
+  // Add single daemon with its owner (admin only)
+  function add(address daemon, address owner) external onlyHookOwner {
+    _add(daemon, owner);
   }
 
-  function setActive(address t, bool a) external {
-    _setActive(t, a);
+  // Bulk activate/deactivate by admin owner
+  function activateMany(address[] calldata daemonAddresses) external onlyHookOwner {
+    _activateMany(daemonAddresses);
   }
 
-  function setActiveById(uint16 id, bool a) external {
-    _setActiveById(id, a);
+  function deactivateMany(address[] calldata daemonAddresses) external onlyHookOwner {
+    _deactivateMany(daemonAddresses);
   }
 
-  function activateMany(address[] calldata addrs) external {
-    _activateMany(addrs);
-  }
-
-  function deactivateMany(address[] calldata addrs) external {
-    _deactivateMany(addrs);
-  }
+  // Note: single activation functions are inherited:
+  // - setActive(address daemon, bool isActive) -> only daemon owner
+  // - setActiveById(uint16 daemonId, bool isActive) -> only daemon owner
 
   // ---- Per-pool rebate admin ----
   function toggleRebate(PoolKey calldata key) external onlyPoolOwner(key) {

@@ -12,6 +12,7 @@ contract DaemonRegistry {
   mapping(address => uint16) public addressToId;
   mapping(uint16 => address) public idToAddress;
   mapping(address => bool) public active;
+  mapping(address => address) public daemonOwner; // daemon address => owner address
 
   // Compact activation bitmap: bit i corresponds to id i
   // Stored as 256-bit words for efficient updates
@@ -38,26 +39,10 @@ contract DaemonRegistry {
     _activationBitmaskWords[wordIndex] = currentWord;
   }
 
-  // TODO: ADD OnlyHookOwner
-  function _addMany(address[] memory daemonAddresses) internal {
-    for (uint256 index = 0; index < daemonAddresses.length; index++) {
-      address daemon = daemonAddresses[index];
-      require(daemon != address(0), "zero");
-      require(!exists[daemon], "dup");
-      require(_daemonAddresses.length < 3200, "cap 3200");
-      uint16 daemonId = uint16(_daemonAddresses.length);
-      exists[daemon] = true;
-      addressToId[daemon] = daemonId;
-      idToAddress[daemonId] = daemon;
-      _daemonAddresses.push(daemon);
-      emit Added(daemon, daemonId);
-      // active[daemon] is false by default
-      _ensureBitCapacity(_daemonAddresses.length);
-    }
-  }
+  // Note: bulk add is handled in the hook to also capture per-daemon owners
 
   // TODO: ADD OnlyHookOwner
-  function _add(address daemon) internal {
+  function _add(address daemon, address owner) internal {
     require(daemon != address(0), "zero");
     require(!exists[daemon], "dup");
     require(_daemonAddresses.length < 3200, "cap 3200");
@@ -66,6 +51,7 @@ contract DaemonRegistry {
     addressToId[daemon] = daemonId;
     idToAddress[daemonId] = daemon;
     _daemonAddresses.push(daemon);
+    daemonOwner[daemon] = owner;
     emit Added(daemon, daemonId);
     // active[daemon] is false by default
     _ensureBitCapacity(_daemonAddresses.length);
@@ -112,6 +98,20 @@ contract DaemonRegistry {
     active[daemon] = isActive;
     _setActiveBit(daemonId, isActive);
     emit ActivationChanged(daemon, daemonId, isActive);
+  }
+
+  // Single-activation APIs restricted to daemon owner
+  function setActive(address daemon, bool isActive) external {
+    require(exists[daemon], "!exist");
+    require(msg.sender == daemonOwner[daemon], "!owner");
+    _setActive(daemon, isActive);
+  }
+
+  function setActiveById(uint16 daemonId, bool isActive) external {
+    address daemon = idToAddress[daemonId];
+    require(daemon != address(0), "!exist");
+    require(msg.sender == daemonOwner[daemon], "!owner");
+    _setActive(daemon, isActive);
   }
 
   // TODO: ADD OnlyHookOwner
