@@ -282,6 +282,11 @@ contract Conflux is BaseHook, DaemonRegistry, ChainLinkConsumer, HookOwnable, Po
     _deactivateMany(daemonAddresses);
   }
 
+  // Ban daemon (admin only): disables and prevents future activation by owner
+  function banDaemon(address daemon) external onlyHookOwner {
+    _banDaemon(daemon);
+  }
+
   // Note: single activation functions are inherited:
   // - setActive(address daemon, bool isActive) -> only daemon owner
   // - setActiveById(uint16 daemonId, bool isActive) -> only daemon owner

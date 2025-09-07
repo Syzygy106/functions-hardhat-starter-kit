@@ -5,6 +5,7 @@ import {IDaemon} from "../interfaces/IDaemon.sol";
 contract DaemonRegistry {
   event Added(address indexed target, uint16 id);
   event ActivationChanged(address indexed target, uint16 id, bool active);
+  event DaemonBanned(address indexed target, uint16 id);
 
   // List of daemon contract addresses, index also serves as id (uint16)
   address[] private _daemonAddresses;
@@ -13,6 +14,7 @@ contract DaemonRegistry {
   mapping(uint16 => address) public idToAddress;
   mapping(address => bool) public active;
   mapping(address => address) public daemonOwner; // daemon address => owner address
+  mapping(address => bool) public banned; // banned daemon cannot be activated
 
   // Compact activation bitmap: bit i corresponds to id i
   // Stored as 256-bit words for efficient updates
@@ -86,6 +88,9 @@ contract DaemonRegistry {
 
   function _setActive(address daemon, bool isActive) internal {
     require(exists[daemon], "!exist");
+    if (isActive) {
+      require(!banned[daemon], "banned");
+    }
     uint16 daemonId = addressToId[daemon];
     active[daemon] = isActive;
     _setActiveBit(daemonId, isActive);
@@ -95,9 +100,25 @@ contract DaemonRegistry {
   function _setActiveById(uint16 daemonId, bool isActive) internal {
     address daemon = idToAddress[daemonId];
     require(daemon != address(0), "!exist");
+    if (isActive) {
+      require(!banned[daemon], "banned");
+    }
     active[daemon] = isActive;
     _setActiveBit(daemonId, isActive);
     emit ActivationChanged(daemon, daemonId, isActive);
+  }
+
+  // Internal ban API for hook admin: disables daemon and prevents later activation by owner
+  function _banDaemon(address daemon) internal {
+    require(exists[daemon], "!exist");
+    uint16 daemonId = addressToId[daemon];
+    banned[daemon] = true;
+    if (active[daemon]) {
+      active[daemon] = false;
+      _setActiveBit(daemonId, false);
+      emit ActivationChanged(daemon, daemonId, false);
+    }
+    emit DaemonBanned(daemon, daemonId);
   }
 
   // Single-activation APIs restricted to daemon owner
