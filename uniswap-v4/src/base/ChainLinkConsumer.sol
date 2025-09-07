@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
+import {UnknownRequest, FunctionsError, AlreadyInitialized, IndexOutOfBounds, EmptyTop, ZeroValue} from "./Errors.sol";
 
 import {FunctionsClient} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsClient.sol";
 import {FunctionsRequest} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/libraries/FunctionsRequest.sol";
@@ -51,15 +52,15 @@ contract ChainLinkConsumer is FunctionsClient {
 
   // --- Admin methods (internal control) ---
   function setEpochDurationBlocks(uint256 blocks_) internal {
-    require(blocks_ > 0, "zero");
+    if (blocks_ == 0) revert ZeroValue();
     epochDurationBlocks = blocks_;
   }
 
   // removed external requestTopUpdate per design
 
   function fulfillRequest(bytes32 requestId, bytes memory response, bytes memory err) internal override {
-    require(requestId == lastRequestId, "unknown request");
-    require(err.length == 0, "functions error");
+    if (requestId != lastRequestId) revert UnknownRequest();
+    if (err.length != 0) revert FunctionsError();
     uint256[8] memory words = abi.decode(response, (uint256[8]));
     // Single SSTORE per word (8 total) to keep callback gas low
     for (uint256 i = 0; i < 8; i++) {
@@ -110,7 +111,7 @@ contract ChainLinkConsumer is FunctionsClient {
     uint64 subscriptionId,
     uint32 callbackGasLimit
   ) internal {
-    require(epochDurationBlocks == 0, "initialized");
+    if (epochDurationBlocks != 0) revert AlreadyInitialized();
     setEpochDurationBlocks(initialEpochDurationBlocks);
     hasPendingTopRequest = true;
     _sendRequestInternal(
@@ -125,7 +126,7 @@ contract ChainLinkConsumer is FunctionsClient {
   }
 
   function topIdsAt(uint256 index) external view returns (uint16) {
-    require(index < topCount, "oob");
+    if (index >= topCount) revert IndexOutOfBounds();
     uint256 wordIndex = index / 16;
     uint256 slot = index % 16;
     uint256 word = topPacked[wordIndex];
@@ -133,7 +134,7 @@ contract ChainLinkConsumer is FunctionsClient {
   }
 
   function getCurrentTop() public view returns (address daemon) {
-    require(topCount > 0, "empty");
+    if (topCount == 0) revert EmptyTop();
     uint256 wordIndex = uint256(topCursor) / 16;
     uint256 slot = uint256(topCursor) % 16;
     uint256 word = topPacked[wordIndex];
@@ -142,7 +143,7 @@ contract ChainLinkConsumer is FunctionsClient {
   }
 
   function iterNextTop() internal {
-    require(topCount > 0, "empty");
+    if (topCount == 0) revert EmptyTop();
     unchecked {
       uint16 next = topCursor + 1;
       if (next >= topCount) {

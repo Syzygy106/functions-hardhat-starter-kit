@@ -7,6 +7,8 @@ out = "out"
 solc_version = "0.8.30"
 src = "src"
 via_ir = false
+ignored_paths = ["script", "script/**"]
+script = "scripts-off"
 
 [lint]
 exclude_lints = ["screaming-snake-case-immutable", "screaming-snake-case-const"]

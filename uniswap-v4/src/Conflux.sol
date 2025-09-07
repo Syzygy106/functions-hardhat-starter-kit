@@ -18,6 +18,7 @@ import {HookOwnable} from "./base/HookOwnable.sol";
 import {PoolOwnable} from "./base/PoolOwnable.sol";
 import {ChainLinkConsumer} from "./base/ChainLinkConsumer.sol";
 import {IDaemon} from "./interfaces/IDaemon.sol";
+import {LengthMismatch} from "./base/Errors.sol";
 
 contract Conflux is BaseHook, DaemonRegistry, ChainLinkConsumer, HookOwnable, PoolOwnable {
   using PoolIdLibrary for PoolKey;
@@ -156,7 +157,7 @@ contract Conflux is BaseHook, DaemonRegistry, ChainLinkConsumer, HookOwnable, Po
     // rebateAmount = 0 (would be sorted at JS Chainlink Functions side)
 
     // Sync PoolManager's balance and check before transfer
-    poolManager.sync(rebateToken);
+    poolManager.sync(Currency.wrap(rebateToken));
     uint256 balanceBefore = IERC20(rebateToken).balanceOf(address(poolManager));
     uint256 requiredAmount = uint256(uint128(daemonRebateAmount));
 
@@ -271,9 +272,14 @@ contract Conflux is BaseHook, DaemonRegistry, ChainLinkConsumer, HookOwnable, Po
     );
   }
 
+  // Set epoch length (in blocks) with hook-owner restriction
+  function setEpochLength(uint256 blocks_) external onlyHookOwner {
+    setEpochDurationBlocks(blocks_);
+  }
+
   // Add many daemons with their owners (admin only)
   function addMany(address[] calldata daemonAddresses, address[] calldata owners) external onlyHookOwner {
-    require(daemonAddresses.length == owners.length, "len");
+    if (daemonAddresses.length != owners.length) revert LengthMismatch();
     for (uint256 i = 0; i < daemonAddresses.length; i++) {
       _add(daemonAddresses[i], owners[i]);
     }

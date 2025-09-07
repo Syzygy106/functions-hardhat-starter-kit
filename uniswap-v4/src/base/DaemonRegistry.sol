@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.30;
 import {IDaemon} from "../interfaces/IDaemon.sol";
+import {ZeroAddress, DuplicateDaemon, CapacityExceeded, IdDoesNotExist, NotExist, DaemonIsBanned, NotDaemonOwner, CountInvalid, StartInvalid} from "./Errors.sol";
 
 contract DaemonRegistry {
   event Added(address indexed target, uint16 id);
@@ -45,9 +46,9 @@ contract DaemonRegistry {
 
   // TODO: ADD OnlyHookOwner
   function _add(address daemon, address owner) internal {
-    require(daemon != address(0), "zero");
-    require(!exists[daemon], "dup");
-    require(_daemonAddresses.length < 3200, "cap 3200");
+    if (daemon == address(0)) revert ZeroAddress();
+    if (exists[daemon]) revert DuplicateDaemon();
+    if (_daemonAddresses.length >= 3200) revert CapacityExceeded();
     uint16 daemonId = uint16(_daemonAddresses.length);
     exists[daemon] = true;
     addressToId[daemon] = daemonId;
@@ -73,7 +74,7 @@ contract DaemonRegistry {
 
   function getById(uint16 daemonId) external view returns (address) {
     address daemon = idToAddress[daemonId];
-    require(daemon != address(0), "id !exist");
+    if (daemon == address(0)) revert IdDoesNotExist();
     return daemon;
   }
 
@@ -87,9 +88,9 @@ contract DaemonRegistry {
   }
 
   function _setActive(address daemon, bool isActive) internal {
-    require(exists[daemon], "!exist");
+    if (!exists[daemon]) revert NotExist();
     if (isActive) {
-      require(!banned[daemon], "banned");
+      if (banned[daemon]) revert DaemonIsBanned();
     }
     uint16 daemonId = addressToId[daemon];
     active[daemon] = isActive;
@@ -99,9 +100,9 @@ contract DaemonRegistry {
 
   function _setActiveById(uint16 daemonId, bool isActive) internal {
     address daemon = idToAddress[daemonId];
-    require(daemon != address(0), "!exist");
+    if (daemon == address(0)) revert NotExist();
     if (isActive) {
-      require(!banned[daemon], "banned");
+      if (banned[daemon]) revert DaemonIsBanned();
     }
     active[daemon] = isActive;
     _setActiveBit(daemonId, isActive);
@@ -110,7 +111,7 @@ contract DaemonRegistry {
 
   // Internal ban API for hook admin: disables daemon and prevents later activation by owner
   function _banDaemon(address daemon) internal {
-    require(exists[daemon], "!exist");
+    if (!exists[daemon]) revert NotExist();
     uint16 daemonId = addressToId[daemon];
     banned[daemon] = true;
     if (active[daemon]) {
@@ -123,15 +124,15 @@ contract DaemonRegistry {
 
   // Single-activation APIs restricted to daemon owner
   function setActive(address daemon, bool isActive) external {
-    require(exists[daemon], "!exist");
-    require(msg.sender == daemonOwner[daemon], "!owner");
+    if (!exists[daemon]) revert NotExist();
+    if (msg.sender != daemonOwner[daemon]) revert NotDaemonOwner();
     _setActive(daemon, isActive);
   }
 
   function setActiveById(uint16 daemonId, bool isActive) external {
     address daemon = idToAddress[daemonId];
-    require(daemon != address(0), "!exist");
-    require(msg.sender == daemonOwner[daemon], "!owner");
+    if (daemon == address(0)) revert NotExist();
+    if (msg.sender != daemonOwner[daemon]) revert NotDaemonOwner();
     _setActive(daemon, isActive);
   }
 
@@ -211,9 +212,9 @@ contract DaemonRegistry {
     uint256 count,
     uint256 blockNumber
   ) external view returns (int128[] memory points) {
-    require(count > 0 && count <= 800, "count");
+    if (!(count > 0 && count <= 800)) revert CountInvalid();
     uint256 total = _daemonAddresses.length;
-    require(start <= total, "start");
+    if (start > total) revert StartInvalid();
     uint256 available = total > start ? total - start : 0;
     uint256 toTake = count < available ? count : available;
     points = new int128[](toTake);
@@ -240,7 +241,7 @@ contract DaemonRegistry {
     points = new uint128[](signedPoints.length);
     for (uint256 i = 0; i < signedPoints.length; i++) {
       int128 value = signedPoints[i];
-      points[i] = value > 0 ? uint128(int256(value)) : uint128(0);
+      points[i] = value > 0 ? uint128(uint256(int256(value))) : uint128(0);
     }
   }
 

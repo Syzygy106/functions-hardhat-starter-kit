@@ -19,6 +19,24 @@ module.exports = {
   solidity: {
     compilers: [
       {
+        version: "0.8.30",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 1000,
+          },
+          viaIR: true,
+        },
+      },
+      {
+        version: "0.8.26",
+        settings: SOLC_SETTINGS,
+      },
+      {
+        version: "0.8.24",
+        settings: SOLC_SETTINGS,
+      },
+      {
         version: "0.8.19",
         settings: SOLC_SETTINGS,
       },

@@ -20,7 +20,10 @@ const PRIVATE_KEY = process.env.PRIVATE_KEY
 // TODO @dev - set this to run the accept.js task.
 const SECOND_PRIVATE_KEY = process.env.SECOND_PRIVATE_KEY
 
-if (!isTestEnvironment && !isSimulation && !PRIVATE_KEY) {
+// Allow skipping PK check for non-deployment tasks (e.g., compile)
+const SKIP_PRIVATE_KEY_CHECK =
+  process.env.SKIP_PRIVATE_KEY_CHECK === "1" || process.env.HARDHAT_SKIP_PRIVATE_KEY_CHECK === "1"
+if (!isTestEnvironment && !isSimulation && !PRIVATE_KEY && !SKIP_PRIVATE_KEY_CHECK) {
   throw Error("Set the PRIVATE_KEY environment variable with your EVM wallet private key")
 }
 

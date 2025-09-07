@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
+import {NotHookOwner, ZeroAddress} from "./Errors.sol";
 
 /// @notice Abstract contract for hook-level ownership management
 abstract contract HookOwnable {
@@ -16,13 +17,13 @@ abstract contract HookOwnable {
 
   /// @notice Reverts if caller is not the hook owner
   modifier onlyHookOwner() {
-    require(msg.sender == hookOwner, "HookOwnable: caller is not the hook owner");
+    if (msg.sender != hookOwner) revert NotHookOwner();
     _;
   }
 
   /// @notice Transfer hook ownership to a new address
   function transferHookOwnership(address newOwner) external onlyHookOwner {
-    require(newOwner != address(0), "HookOwnable: new owner is zero address");
+    if (newOwner == address(0)) revert ZeroAddress();
     address prev = hookOwner;
     hookOwner = newOwner;
     emit HookOwnerTransferred(prev, newOwner);
