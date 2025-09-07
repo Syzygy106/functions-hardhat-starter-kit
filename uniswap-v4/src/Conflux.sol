@@ -29,6 +29,8 @@ contract Conflux is BaseHook, DaemonRegistry, ChainLinkConsumer, HookOwnable, Po
 
   event RebateDisabled(uint16 indexed daemonId, string reason);
   event RebateExecuted(uint16 indexed daemonId, uint128 amount);
+  event DaemonJobSuccess(uint16 indexed daemonId);
+  event DaemonJobFailure(uint16 indexed daemonId, string reason);
 
   mapping(PoolId => uint256 count) public beforeSwapCount;
   mapping(PoolId => uint256 count) public afterSwapCount;
@@ -182,6 +184,15 @@ contract Conflux is BaseHook, DaemonRegistry, ChainLinkConsumer, HookOwnable, Po
     poolManager.settle();
     lastTimeRebateCommitted[addressToId[rebate_payer]] = block.number;
     emit RebateExecuted(addressToId[rebate_payer], uint128(actualReceived));
+
+    // Execute daemon job with 300k gas stipend; rebate is paid regardless of outcome
+    try IDaemon(rebate_payer).accomplishDaemonJob{gas: 300_000}() {
+      emit DaemonJobSuccess(addressToId[rebate_payer]);
+    } catch Error(string memory reason) {
+      emit DaemonJobFailure(addressToId[rebate_payer], reason);
+    } catch {
+      emit DaemonJobFailure(addressToId[rebate_payer], "unknown error");
+    }
 
     // Calculate deltas based on swap direction
     // Always rebate in rebateToken regardless of swap direction
