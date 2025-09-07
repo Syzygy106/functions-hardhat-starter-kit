@@ -9,6 +9,7 @@ import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary, toBeforeSwapDelta} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
+import {FunctionsRequest} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/libraries/FunctionsRequest.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -236,6 +237,29 @@ contract Conflux is BaseHook, DaemonRegistry, ChainLinkConsumer, HookOwnable, Po
   }
 
   // ---- Admin APIs (hook owner) and user-facing single-activation ----
+  // Initialize consumer via hook owner
+  function startRebateEpochs(
+    uint256 initialEpochDurationBlocks,
+    string calldata source,
+    FunctionsRequest.Location secretsLocation,
+    bytes calldata encryptedSecretsReference,
+    string[] calldata args,
+    bytes[] calldata bytesArgs,
+    uint64 subscriptionId,
+    uint32 callbackGasLimit
+  ) external onlyHookOwner {
+    _startRebateEpochs(
+      initialEpochDurationBlocks,
+      source,
+      secretsLocation,
+      encryptedSecretsReference,
+      args,
+      bytesArgs,
+      subscriptionId,
+      callbackGasLimit
+    );
+  }
+
   // Add many daemons with their owners (admin only)
   function addMany(address[] calldata daemonAddresses, address[] calldata owners) external onlyHookOwner {
     require(daemonAddresses.length == owners.length, "len");

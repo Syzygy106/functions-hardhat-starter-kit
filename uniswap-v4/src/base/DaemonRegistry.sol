@@ -213,6 +213,16 @@ contract DaemonRegistry {
     }
   }
 
+  /// Overload for Chainlink Functions script compatibility: uses current block number and returns uint128[]
+  function aggregatePointsRange(uint256 start, uint256 count) external view returns (uint128[] memory points) {
+    int128[] memory signedPoints = this.aggregatePointsRange(start, count, block.number);
+    points = new uint128[](signedPoints.length);
+    for (uint256 i = 0; i < signedPoints.length; i++) {
+      int128 value = signedPoints[i];
+      points[i] = value > 0 ? uint128(int256(value)) : uint128(0);
+    }
+  }
+
   /// Aggregate getRebateAmount() for all addresses in id order
   function aggregatePointsAll(uint256 blockNumber) external view returns (int128[] memory points) {
     uint256 total = _daemonAddresses.length;

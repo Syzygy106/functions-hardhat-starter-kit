@@ -99,8 +99,8 @@ contract ChainLinkConsumer is FunctionsClient {
     }
   }
 
-  // Initialize with initial epoch duration and send first request
-  function initialize(
+  // Start rebate epochs with initial duration and send first request (hook exposes a wrapper)
+  function _startRebateEpochs(
     uint256 initialEpochDurationBlocks,
     string calldata source,
     FunctionsRequest.Location secretsLocation,
@@ -109,7 +109,7 @@ contract ChainLinkConsumer is FunctionsClient {
     bytes[] calldata bytesArgs,
     uint64 subscriptionId,
     uint32 callbackGasLimit
-  ) external {
+  ) internal {
     require(epochDurationBlocks == 0, "initialized");
     setEpochDurationBlocks(initialEpochDurationBlocks);
     hasPendingTopRequest = true;
